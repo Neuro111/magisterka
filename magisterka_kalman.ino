@@ -7,6 +7,8 @@
 #include <Wire.h>
 #endif
 
+#include "Kalman.h"
+
 MPU6050 mpu; // adres 0x68 (AD0 LOW)
 
 #define OUTPUT_READABLE_YAWPITCHROLL
@@ -42,6 +44,17 @@ int16_t gx, gy, gz;
 // packet structure for InvenSense teapot demo
 uint8_t teapotPacket[14] = { '$', 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, '\r', '\n' };
 
+
+
+
+// kalman i komplementarny zmienne
+uint32_t timer;
+double gyroXangle, gyroYangle; // Angle calculate using the gyro only
+double compAngleX, compAngleY; // Calculated angle using a complementary filter
+double kalAngleX, kalAngleY; // Calculated angle using a Kalman filter
+Kalman kalmanX; // Create the Kalman instances
+Kalman kalmanY;
+bool first=true;
 
 
 // ================================================================
@@ -83,7 +96,7 @@ void setup() {
   devStatus = mpu.dmpInitialize();
 
   mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_2000);
-    mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_4);
+    mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_8);
 
   // supply your own gyro offsets here, scaled for min sensitivity
   mpu.setXGyroOffset(25);
@@ -127,6 +140,10 @@ void setup() {
   }
   // configure LED for output
     pinMode(LED_PIN, OUTPUT);
+
+    timer = micros();
+    Serial.print(5);
+Serial.write("test");
 }
 
   void loop() {
@@ -197,7 +214,7 @@ void setup() {
             Serial.println(euler[2] * 180/M_PI);
         #endif
 
-        #ifdef OUTPUT_READABLE_YAWPITCHROLL
+        #if 1//OUTPUT_READABLE_YAWPITCHROLL
             // display Euler angles in degrees
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             mpu.dmpGetGravity(&gravity, &q);
@@ -209,7 +226,7 @@ void setup() {
             Serial.print("\t");
             Serial.print(ypr[2] * 180/M_PI);
         #endif
-
+#ifdef OUTPUT_READABLE_EULER
         mpu.dmpGetAccel(dmpAccel,fifoBuffer);
         Serial.print("\t");
         Serial.print(dmpAccel[0]);
@@ -225,23 +242,25 @@ void setup() {
         Serial.print(dmpGyro[1]);
         Serial.print("\t");
         Serial.print(dmpGyro[2]);
-
+#endif
         mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-
-Serial.print("\t");
-        Serial.print(ax);
-        Serial.print("\t");
-        Serial.print(ay);
-        Serial.print("\t");
-        Serial.print(az);
-
-        mpu.dmpGetGyro(dmpGyro,fifoBuffer);
-        Serial.print("\t");
-        Serial.print(gx);
-        Serial.print("\t");
-        Serial.print(gy);
-        Serial.print("\t");
-        Serial.println(gz);
+#if 1
+//Serial.print("\t");
+//        Serial.print(ax);
+//        Serial.print("\t");
+//        Serial.print(ay);
+//        Serial.print("\t");
+//        Serial.print(az);
+//
+//       // mpu.dmpGetGyro(dmpGyro,fifoBuffer);
+//        Serial.print("\t");
+//        Serial.print(gx);
+//        Serial.print("\t");
+//        Serial.print(gy);
+//        Serial.print("\t");
+//        Serial.print(gz);
+//        Serial.print("\t");
+        #endif
         #ifdef OUTPUT_READABLE_REALACCEL
             // display real acceleration, adjusted to remove gravity
             mpu.dmpGetQuaternion(&q, fifoBuffer);
@@ -289,5 +308,125 @@ Serial.print("\t");
         // blink LED to indicate activity
         blinkState = !blinkState;
         digitalWrite(LED_PIN, blinkState);
+
+if(first)
+{
+  first = false;
+  //#ifdef RESTRICT_PITCH // Eq. 25 and 26
+  double roll  = atan2(ay, az) * RAD_TO_DEG;
+  double pitch = -atan2(ax , sqrt(long(ay) * ay + long(az) * az)) * RAD_TO_DEG;
+//#else // Eq. 28 and 29
+//  double roll  = 2;// atan(ay / sqrt(ax * ax + az * az)) * RAD_TO_DEG;
+//  double pitch = atan2(-ax, az) * RAD_TO_DEG;
+//#endif
+kalmanX.setAngle(roll); // Set starting angle
+  kalmanY.setAngle(pitch);
+  gyroXangle = roll;
+  gyroYangle = pitch;
+  compAngleX = roll;
+  compAngleY = pitch;
+}
+else{
+
+         double dt = (double)(micros() - timer) / 1000000; // Calculate delta time
+  timer = micros();
+
+  // Source: http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf eq. 25 and eq. 26
+  // atan2 outputs the value of -π to π (radians) - see http://en.wikipedia.org/wiki/Atan2
+  // It is then converted from radians to degrees
+//#ifdef RESTRICT_PITCH // Eq. 25 and 26
+  double roll  = atan2(ay, az) * RAD_TO_DEG;
+  double pitch = -atan2(ax , sqrt(long(ay) * ay + long(az) * az)) * RAD_TO_DEG;//
+//#else // Eq. 28 and 29
+//  double roll  = atan2(ay / sqrt(ax * ax + az * az)) * RAD_TO_DEG;
+//  double pitch = atan2(-ax, az) * RAD_TO_DEG;
+//#endif
+
+//Serial.print("\t");
+//Serial.print(ay);
+//            Serial.print("\t");
+//            Serial.print(long(ay)*ay);
+//            Serial.print("\t");
+//            Serial.print(az);
+//            Serial.print("\t");
+//            Serial.print(long(az)*az);
+//            Serial.print("\t");
+  double gyroXrate = gx / 131.0; // Convert to deg/s
+  double gyroYrate = gy / 131.0; // Convert to deg/s
+
+#ifdef RESTRICT_PITCH
+  // This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
+  if ((roll < -90 && kalAngleX > 90) || (roll > 90 && kalAngleX < -90)) {
+    kalmanX.setAngle(roll);
+    compAngleX = roll;
+    kalAngleX = roll;
+    gyroXangle = roll;
+  } else
+    kalAngleX = kalmanX.getAngle(roll, gyroXrate, dt); // Calculate the angle using a Kalman filter
+
+  if (abs(kalAngleX) > 90)
+    gyroYrate = -gyroYrate; // Invert rate, so it fits the restriced accelerometer reading
+  kalAngleY = kalmanY.getAngle(pitch, gyroYrate, dt);
+#else
+  // This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
+  if ((pitch < -90 && kalAngleY > 90) || (pitch > 90 && kalAngleY < -90)) {
+    kalmanY.setAngle(pitch);
+    compAngleY = pitch;
+    kalAngleY = pitch;
+    gyroYangle = pitch;
+  } else
+    kalAngleY = kalmanY.getAngle(pitch, gyroYrate, dt); // Calculate the angle using a Kalman filter
+
+  if (abs(kalAngleY) > 90)
+    gyroXrate = -gyroXrate; // Invert rate, so it fits the restriced accelerometer reading
+  kalAngleX = kalmanX.getAngle(roll, gyroXrate, dt); // Calculate the angle using a Kalman filter
+#endif
+
+  gyroXangle += gyroXrate * dt; // Calculate gyro angle without any filter
+  gyroYangle += gyroYrate * dt;
+  //gyroXangle += kalmanX.getRate() * dt; // Calculate gyro angle using the unbiased rate
+  //gyroYangle += kalmanY.getRate() * dt;
+
+  compAngleX = 0.93 * (compAngleX + gyroXrate * dt) + 0.07 * roll; // Calculate the angle using a Complimentary filter
+  compAngleY = 0.93 * (compAngleY + gyroYrate * dt) + 0.07 * pitch;
+
+  // Reset the gyro angle when it has drifted too much
+  if (gyroXangle < -180 || gyroXangle > 180)
+    gyroXangle = kalAngleX;
+  if (gyroYangle < -180 || gyroYangle > 180)
+    gyroYangle = kalAngleY;
+
+  /* Print Data */
+#if 0 // Set to 1 to activate
+  Serial.print(ax); Serial.print("\t");
+  Serial.print(ay); Serial.print("\t");
+  Serial.print(az); Serial.print("\t");
+  Serial.print(gx); Serial.print("\t");
+  Serial.print(gy); Serial.print("\t");
+  Serial.print(gz); Serial.print("\t");
+  Serial.print("\t");
+#endif
+Serial.print("\t");
+  Serial.print(roll); Serial.print("\t");
+  Serial.print(gyroXangle); Serial.print("\t");
+  Serial.print(compAngleX); Serial.print("\t");
+  Serial.print(kalAngleX); Serial.print("\t");
+
+  Serial.print("\t");
+
+  Serial.print(pitch); Serial.print("\t");
+  Serial.print(gyroYangle); Serial.print("\t");
+  Serial.print(compAngleY); Serial.print("\t");
+  Serial.print(kalAngleY); Serial.print("\t");
+
+#if 0 // Set to 1 to print the temperature
+  Serial.print("\t");
+  double temperature = (double)tempRaw / 340.0 + 36.53;
+  Serial.print(temperature); Serial.print("\t");
+#endif
+
+  Serial.print("\r\n");
+ // delay(2);
+    }
     }
 }
