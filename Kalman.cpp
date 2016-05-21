@@ -47,6 +47,7 @@ float Kalman::getAngle(float newAngle, float newRate, float dt) {
     // Update estimation error covariance - Project the error covariance ahead
     /* Step 2 */
     P[0][0] += dt * (dt*P[1][1] - P[0][1] - P[1][0] + Q_angle);
+    //P[0][0] += dt * (P[1][1] + P[0][1]) + Q_angle * dt;
     P[0][1] -= dt * P[1][1];
     P[1][0] -= dt * P[1][1];
     P[1][1] += Q_bias * dt;

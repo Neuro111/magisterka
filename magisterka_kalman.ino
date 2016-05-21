@@ -1,11 +1,6 @@
-#include <MPU6050_6Axis_MotionApps20.h>
-
 #include <Wire.h>
-#include <I2Cdev.h>
-
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-#include <Wire.h>
-#endif
+#include "I2Cdev.h"
+#include "MPU6050_6Axis_MotionApps20.h"
 
 #include "Kalman.h"
 
@@ -28,11 +23,7 @@ uint8_t fifoBuffer[64]; // FIFO storage buffer
 
 // orientation/motion vars
 Quaternion q;           // [w, x, y, z]         quaternion container
-VectorInt16 aa;         // [x, y, z]            accel sensor measurements
-VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
 VectorFloat gravity;    // [x, y, z]            gravity vector
-float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 //float pitch_kalman;
 //float pitch_dmp;
@@ -62,17 +53,15 @@ bool oneTime = false;
 // ================================================================
 
 volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
-void dmpDataReady() {
+void dmpDataReady() 
+{
   mpuInterrupt = true;
 }
 
 void setup() {
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+  
   Wire.begin();
-  TWBR = 24; // 400kHz I2C clock (200kHz if CPU is 8MHz)
-#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-  Fastwire::setup(400, true);
-#endif
+  TWBR = 24; 
 
   Serial.begin(115200);
 
@@ -84,7 +73,7 @@ void setup() {
   // verify connection
   Serial.println(F("Testing device connections..."));
   Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-
+delay(2);
   //  // wait for ready
   //  Serial.println(F("\nSend any character to begin DMP programming and demo: "));
   //  while (Serial.available() && Serial.read()); // empty buffer
@@ -95,8 +84,8 @@ void setup() {
   Serial.println(F("Initializing DMP..."));
   devStatus = mpu.dmpInitialize();
 
-  mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_250);
-  mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);
+//  mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_250);
+//  mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);
 
   // supply your own gyro offsets here, scaled for min sensitivity
   mpu.setXGyroOffset(25);
@@ -208,8 +197,8 @@ void loop() {
       //            Serial.print("\t");
       //            Serial.print(long(az)*az);
       //            Serial.print("\t");
-      double gyroXrate = gx / 131.0; // Convert to deg/s
-      double gyroYrate = gy / 131.0; // Convert to deg/s
+      double gyroXrate = -gx / 16.4; // Convert to deg/s
+      double gyroYrate = -gy / 16.4; // Convert to deg/s
 
 #ifdef RESTRICT_PITCH
       // This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
@@ -347,7 +336,7 @@ void loop() {
     Serial.print(ypr[1] * 180 / M_PI);
     Serial.print("\t");
     Serial.print(ypr[2] * 180 / M_PI);
-    Serial.print("\t");
+    Serial.print("\t\r\n");
 #endif
 #if 0
     mpu.dmpGetAccel(dmpAccel, fifoBuffer);
