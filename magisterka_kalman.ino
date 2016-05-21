@@ -43,7 +43,7 @@ int16_t gx, gy, gz;
 
 // packet structure for InvenSense teapot demo
 uint8_t teapotPacket[14] = { '$', 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, '\r', '\n' };
-
+//uint8_t guiPacket[20] = {0x10, 0x02, 0, 0, 0, 0, 0 , 0, 0, 0, 0, 0, 0, 0
 
 
 
@@ -100,7 +100,7 @@ void setup() {
 
   // supply your own gyro offsets here, scaled for min sensitivity
   mpu.setXGyroOffset(25);
-  mpu.setYGyroOffset(4);
+  mpu.setYGyroOffset(12);
   mpu.setZGyroOffset(-9);
   //-4503  -1159 830 28  8 -10
 
@@ -254,22 +254,22 @@ void loop() {
         gyroYangle = kalAngleY;
 
       /* Print Data */
-#if 0 // Set to 1 to activate
+#if 1 // Set to 1 to activate
       Serial.print(ax); Serial.print("\t");
       Serial.print(ay); Serial.print("\t");
       Serial.print(az); Serial.print("\t");
       Serial.print(gx); Serial.print("\t");
       Serial.print(gy); Serial.print("\t");
       Serial.print(gz); Serial.print("\t");
-      Serial.print("\t");
+     // Serial.print("\t");
 #endif
-      Serial.print("\t");
+    //  Serial.print("\t");
       Serial.print(roll); Serial.print("\t");
       Serial.print(gyroXangle); Serial.print("\t");
       Serial.print(compAngleX); Serial.print("\t");
       Serial.print(kalAngleX); Serial.print("\t");
 
-      Serial.print("\t");
+      //Serial.print("\t");
 
       Serial.print(pitch); Serial.print("\t");
       Serial.print(gyroYangle); Serial.print("\t");
@@ -347,6 +347,7 @@ void loop() {
     Serial.print(ypr[1] * 180 / M_PI);
     Serial.print("\t");
     Serial.print(ypr[2] * 180 / M_PI);
+    Serial.print("\t");
 #endif
 #if 0
     mpu.dmpGetAccel(dmpAccel, fifoBuffer);
